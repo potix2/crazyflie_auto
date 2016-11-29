@@ -2,21 +2,44 @@
 """
 Script to retrieve sensor images from kinect
 """
-import roslib
-import rospy
-import cv2
 import sys
+import rospy
+import roslib
+import cv2
+from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
+import tf
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
-from cv_bridge import CvBridge, CvBridgeError
+from sensor_msgs.msg import CameraInfo
 
 class CrazyflieTracker:
 
     def __init__(self):
-        # subscribe to kinect image messages
-        self.sub = rospy.Subscriber("kinect2/qhd/image_color_rect", Image, self.image_callback, queue_size=1)
+        rospy.init_node('crazyflie_tracker')
         self.bridge = CvBridge()
+
+        # publish transform rate at 50Hz
+        self.rate = rospy.Rate(50.0)
+
+        # subscribe to kinect image messages
+        rospy.wait_for_message("/kinect2/qhd/camera_info", CameraInfo)
+
+        # Subscribe to Kinect v2 sd camera_info to get image frame height and width
+        rospy.Subscriber('/kinect2/qhd/camera_info', CameraInfo, self.camera_data, queue_size=1)
+        rospy.Subscriber("/kinect2/qhd/image_color_rect", Image, self.image_callback, queue_size=1)
+
+        self.rate.sleep()
+
+    def camera_data(self, data):
+        # set values on the parameter server
+        rospy.set_param('camera_link', data.header.frame_id)  # kinect2_ir_optical_frame
+        rospy.set_param('camera_height', data.height)         # sd height is 424 / qhd height is 540
+        rospy.set_param('camera_width', data.width)           # sd width is 512 / qhd width is 960
+
+        # set values for local variables
+        self.cam_height = data.height
+        self.cam_width = data.width
 
     def image_callback(self,data):
         try:
@@ -72,8 +95,7 @@ class CrazyflieTracker:
            cv2.waitKey(3)
 
 def main(args):
-    ic = CrazyflieTracker()
-    rospy.init_node('crazyflie_tracker')
+    tracker = CrazyflieTracker()
     try:
         rospy.spin()
     except KeyboardInterrupt:
