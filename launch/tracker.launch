@@ -1,0 +1,16 @@
+<?xml version="1.0" ?>
+<launch>
+  <node name="crazyflie_tracker" pkg="crazyflie_auto" type="tracker.py" output="screen" />
+
+  <!-- static transform between world and kinect with z offset of 1 meter and yaw of -pi/2
+       (rotation about Z), pitch of 0 (rotation about Y), and roll of pi/2 (rotation about X).  -->
+  <node pkg="tf" type="static_transform_publisher" name="baselink" args="0 0 1 -1.5708 0 -1.5708 /world /kinect2_link 50" />
+
+  <param name="/crazyflie_tracker/h_margin" type="int" value="10" />
+  <param name="/crazyflie_tracker/s_margin" type="int" value="30" />
+  <param name="/crazyflie_tracker/v_margin" type="int" value="30" />
+  <include file="$(find kinect2_bridge)/launch/kinect2_bridge.launch">
+    <arg name="publish_tf" value="true"/>
+  </include>
+
+</launch>
