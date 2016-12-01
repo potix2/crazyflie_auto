@@ -12,5 +12,9 @@
   <include file="$(find kinect2_bridge)/launch/kinect2_bridge.launch">
     <arg name="publish_tf" value="true"/>
   </include>
+  <node pkg="robot_state_publisher" type="state_publisher" name="rob_st_pub" />
+  <node pkg="rviz" type="rviz" name="rviz" args="-d $(find crazyflie_auto)/urdf.rviz" />
+
+  <param name="robot_description" textfile="$(find crazyflie_auto)/urdf/cf_target.urdf" />
 
 </launch>
