@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="frame" default="crazyflie" />
+  <arg name="tf_prefix" default="crazyflie" />
+
+  <include file="$(find crazyflie_driver)/launch/crazyflie_server.launch">
+  </include>
+
+  <group ns="crazyflie">
+    <include file="$(find crazyflie_driver)/launch/crazyflie_add.launch">
+      <arg name="uri" default="radio://0/10/250K" />
+      <arg name="tf_prefix" value="crazyflie" />
+      <arg name="roll_trim" default="0.5" />
+      <arg name="pitch_trim" default="0.0" />
+      <arg name="enable_logging" value="True" />
+    </include>
+  </group>
+
+  <node name="crazyflie_tracker" pkg="crazyflie_auto" type="tracker.py" output="screen" />
+
+  <!-- static transform between world and kinect with z offset of 1 meter and yaw of -pi/2
+       (rotation about Z), pitch of 0 (rotation about Y), and roll of pi/2 (rotation about X).  -->
+  <node pkg="tf" type="static_transform_publisher" name="baselink" args="0 0 1 -1.5708 0 -1.5708 /world /camera_link 50" />
+
+  <!-- <node pkg="robot_state_publisher" type="state_publisher" name="rob_st_pub" /> -->
+
+  <include file="$(find realsense_camera)/launch/r200_nodelet_rgbd.launch" />
+
+  <!-- <param name="robot_description" textfile="$(find crazyflie_auto)/urdf/cf_target.urdf" />-->
+  <!-- set parameter on Parameter Server -->
+  <param name="robot_description" command="$(find xacro)/xacro.py '$(find crazyflie_auto)/urdf/kinect.urdf.xacro'" />
+  <node name="joint_state_publisher" pkg="joint_state_publisher" type="joint_state_publisher" />
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher" />
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find crazyflie_auto)/launch/crazyflie_r200.rviz" required="true" />
+  <!-- param name="robot_description" command="$(find xacro)/xacro.py $(find crazyflie_description)/urdf/crazyflie2.urdf.xacro" /-->
+</launch>

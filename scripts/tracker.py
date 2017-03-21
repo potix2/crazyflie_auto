@@ -13,6 +13,7 @@ from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import CameraInfo
 
+
 class CrazyflieTracker:
 
     def __init__(self):
@@ -35,24 +36,41 @@ class CrazyflieTracker:
         self.p = 0
 
         # subscribe to kinect image messages
-        rospy.wait_for_message("/kinect2/qhd/camera_info", CameraInfo)
+        rospy.wait_for_message("/camera/rgb/camera_info", CameraInfo)
+        rospy.wait_for_message("/camera/depth/camera_info", CameraInfo)
 
-        # Subscribe to Kinect v2 sd camera_info to get image frame height and width
-        rospy.Subscriber('/kinect2/qhd/camera_info', CameraInfo, self.camera_data, queue_size=1)
-        rospy.Subscriber("/kinect2/qhd/image_color_rect", Image, self.image_callback, queue_size=1)
-        rospy.Subscriber("/kinect2/qhd/image_depth_rect", Image, self.depth_callback, queue_size=1)
+        # Subscribe to Realsense R200 camera_info to get image frame height and width
+        rospy.Subscriber('/camera/rgb/camera_info', CameraInfo, self.camera_data, queue_size=1)
+        rospy.Subscriber("/camera/rgb/image_rect_color", Image, self.image_callback, queue_size=1)
+        rospy.Subscriber('/camera/depth/camera_info', CameraInfo, self.depth_camera_data, queue_size=1)
+        rospy.Subscriber("/camera/depth/image", Image, self.depth_callback, queue_size=1)
 
         self.rate.sleep()
 
+
     def camera_data(self, data):
         # set values on the parameter server
-        rospy.set_param('camera_link', data.header.frame_id)  # kinect2_ir_optical_frame
+        rospy.set_param('camera_link', data.header.frame_id)  # camera_rgb_optical_frame
         rospy.set_param('camera_height', data.height)         # sd height is 424 / qhd height is 540
         rospy.set_param('camera_width', data.width)           # sd width is 512 / qhd width is 960
 
         # set values for local variables
+        self.camera_link = data.header.frame_id
         self.cam_height = data.height
         self.cam_width = data.width
+        # rospy.loginfo("camera: width=%d, height=%d", int(self.cam_width), int(self.cam_height))
+
+
+    def depth_camera_data(self, data):
+        # set values on the parameter server
+        rospy.set_param('camera_depth_height', data.height)         # sd height is 424 / qhd height is 540
+        rospy.set_param('camera_depth_width', data.width)           # sd width is 512 / qhd width is 960
+
+        # set values for local variables
+        self.cam_depth_height = data.height
+        self.cam_depth_width = data.width
+        # rospy.loginfo("camera depth: width=%d, height=%d", int(self.cam_depth_width), int(self.cam_depth_height))
+
 
     def image_callback(self,data):
         try:
@@ -61,14 +79,16 @@ class CrazyflieTracker:
             print(e)
 
 
-        h_margin = rospy.get_param("/crazyflie_tracker/h_margin")
-        s_margin = rospy.get_param("/crazyflie_tracker/s_margin")
-        v_margin = rospy.get_param("/crazyflie_tracker/v_margin")
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-        lower_green = np.array([143 / 2 - h_margin, 63 * 255 / 100 - s_margin, 47 * 255 / 100 - v_margin], np.uint8)
-        upper_green = np.array([143 / 2 + h_margin, 63 * 255 / 100 + s_margin, 47 * 255 / 100 + v_margin], np.uint8)
-        mask = cv2.inRange(hsv, lower_green, upper_green)
+        # duck
+        # lower=[ 17  36 229], upper=[ 72 146 255]
+
+        # blue light
+        # lower=[ 88 130 212], upper=[128 210 255]
+        lower = np.array([88, 130, 229], np.uint8)
+        upper = np.array([128, 210, 255], np.uint8)
+        mask = cv2.inRange(hsv, lower, upper)
 
         # dilate and erode with kernel size 11x11
         cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((11,11)))
@@ -81,31 +101,44 @@ class CrazyflieTracker:
         if self.contourLength < 1:
            print "No target found"
 
-        else:                       # target found
+        else:
+            # target found
+            ## Loop through all of the contours, and get their areas
+            area = np.array([0.0]*len(contours))
+            for i in range(self.contourLength):
+               area[i] = cv2.contourArea(contours[i])
 
-           ## Loop through all of the contours, and get their areas
-           area = [0.0]*len(contours)
-           for i in range(self.contourLength):
-              area[i] = cv2.contourArea(contours[i])
+            #### Target #### the largest "pink" object
+            # target_image = contours[area.index(max(area))]
+            indicies = np.argpartition(-area, 1)[:2]
+            tu = 0
+            tv = 0
+            for i in indicies:
+                target_image = contours[i]
 
-           #### Target #### the largest "pink" object
-           target_image = contours[area.index(max(area))]
+                # Using moments find the center of the object and draw a red outline around the object
+                target_m = cv2.moments(target_image)
+                target_u = int(target_m['m10']/target_m['m00'])
+                target_v = int(target_m['m01']/target_m['m00'])
+                points = cv2.minAreaRect(target_image)
+                box = cv2.boxPoints(points)
+                box = np.int0(box)
+                cv2.drawContours(image, [box], 0, (0, 0, 255), 2)
+                # rospy.loginfo("target is x at %d and y at %d", int(target_u), int(target_v))
+                tu += target_u
+                tv += target_v
+            self.target_u = int(tu / 2)
+            self.target_v = int(tv / 2)
+            # rospy.loginfo("Center of target is x at %d and y at %d", int(self.target_u), int(self.target_v))
 
-           # Using moments find the center of the object and draw a red outline around the object
-           target_m = cv2.moments(target_image)
-           self.target_u = int(target_m['m10']/target_m['m00'])
-           self.target_v = int(target_m['m01']/target_m['m00'])
-           points = cv2.minAreaRect(target_image)
-           box = cv2.boxPoints(points)
-           box = np.int0(box)
-           cv2.drawContours(image, [box], 0, (0, 0, 255), 2)
-           rospy.loginfo("Center of target is x at %d and y at %d", int(self.target_u), int(self.target_v))
+            self.target_found = True               # set flag for depth_callback processing
 
-           self.target_found = True               # set flag for depth_callback processing
+            # show image with target outlined with a red rectangle
+            cv2.imshow ("Target", image)
 
-           # show image with target outlined with a red rectangle
-           cv2.imshow ("Target", image)
-           cv2.waitKey(3)
+            # TODO: save image when pressed 's' key
+            cv2.waitKey(3)
+
 
     def depth_callback(self, msg):
 
@@ -115,15 +148,14 @@ class CrazyflieTracker:
         except CvBridgeError as e:
             print(e)
 
-        # using box (u, v) position, find depth value of Crazyflie point and divide by 1000
-        # to change millimeters into meters (for Kinect sensors only)
-        self.target_d = depth_image[self.target_v, self.target_u] / 1000.0
-        rospy.loginfo("Depth: x at %d  y at %d  z at %f", int(self.target_u), int(self.target_v), self.target_d)
+        # using box (u, v) position, find depth value of Crazyflie point
+        target_depth = depth_image[int(self.target_v * self.cam_depth_height / self.cam_height), int(self.target_u * self.cam_depth_width / self.cam_width)]
 
-        if self.target_d == 0:
+        if np.isnan(target_depth) or target_depth == 0:
             self.target_d = self.last_d
         else:
-            self.last_d  = self.target_d
+            self.last_d = target_depth
+        # rospy.loginfo("Depth: x at %d  y at %d  z at %f", int(self.target_u), int(self.target_v), self.target_d)
 
         # publish Crazyflie tf transform
         self.update_cf_transform(self.target_u, self.target_v, self.target_d)
@@ -137,8 +169,7 @@ class CrazyflieTracker:
                                     z),
                                 tf.transformations.quaternion_from_euler(self.r, self.p, self.y),
                                 rospy.Time.now(),
-                                "crazyflie/base_link", "kinect2_ir_optical_frame")
-
+                                "crazyflie/base_link", self.camera_link)
         rospy.loginfo("Send CF transform %f %f %f", x, y, z)
 
 def main(args):
