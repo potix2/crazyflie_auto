@@ -31,8 +31,10 @@ class CrazyflieTracker:
         self.last_d = 0
 
 
+        #self.r = 0
+        self.y = 0
         self.r = -1.5708
-        self.y = -3.1415
+        #self.y = -3.1415
         self.p = 0
 
         # subscribe to kinect image messages
@@ -162,14 +164,26 @@ class CrazyflieTracker:
 
     def update_cf_transform(self, x, y, z):
 
-        # send position as transform from the parent "kinect2_ir_optical_frame" to the
+        # send position as transform from the parent "camera_rgb_optical_frame" to the
         # child "crazyflie/base_link" (described by crazyflie.urdf.xacro)"
-        self.pub_tf.sendTransform(( x,
-                                    y,
-                                    z),
+        self.pub_tf.sendTransform((x,
+                                   y,
+                                   z),
                                 tf.transformations.quaternion_from_euler(self.r, self.p, self.y),
                                 rospy.Time.now(),
                                 "crazyflie/base_link", self.camera_link)
+#        self.pub_tf.sendTransform((0.6 - y / 640.0,
+#                                   - z,
+#                                   0),
+#                                tf.transformations.quaternion_from_euler(self.r, self.p, self.y),
+#                                rospy.Time.now(),
+#                                "crazyflie/base_link", self.camera_link)
+#        self.pub_tf.sendTransform(( x / 300.0,
+#                                    y / 500.0,
+#                                    z),
+#                                tf.transformations.quaternion_from_euler(self.r, self.p, self.y),
+#                                rospy.Time.now(),
+#                                "crazyflie/base_link", self.camera_link)
         rospy.loginfo("Send CF transform %f %f %f", x, y, z)
 
 def main(args):

@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
 <launch>
-  <arg name="frame" default="crazyflie" />
+  <!--<arg name="frame" default="crazyflie" />-->
+  <arg name="frame" default="crazyflie/base_link" />
   <arg name="tf_prefix" default="crazyflie" />
 
   <include file="$(find crazyflie_driver)/launch/crazyflie_server.launch">
@@ -25,6 +26,17 @@
   <!-- <node pkg="robot_state_publisher" type="state_publisher" name="rob_st_pub" /> -->
 
   <include file="$(find realsense_camera)/launch/r200_nodelet_rgbd.launch" />
+
+  <node name="crazyflie_window" pkg="crazyflie_auto" type="takeoff_test.py" output="screen">
+      <param name="frame" value="$(arg frame)" />
+      <param name="cam_frame" value="camera_rgb_optical_frame" />
+      <param name="rate" value="10" />
+  </node>
+
+  <node name="crazyflie_controller" pkg="crazyflie_auto" type="control_crazyflie.py" output="screen">
+      <param name="frame" value="$(arg frame)" />
+      <rosparam command="load" file="$(find crazyflie_auto)/config/crazyflie2.yaml" />
+  </node>
 
   <!-- <param name="robot_description" textfile="$(find crazyflie_auto)/urdf/cf_target.urdf" />-->
   <!-- set parameter on Parameter Server -->

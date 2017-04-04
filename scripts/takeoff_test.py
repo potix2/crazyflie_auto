@@ -11,17 +11,26 @@ from std_srvs.srv import Empty
 if __name__ == '__main__':
 
    # initialize ROS node and tf frame info from parameter server, default parameters given
-   rospy.init_node('window_watcher', anonymous=True)
+   rospy.init_node('crazyflie_window', anonymous=True)
    crazyflie_frame = rospy.get_param("~frame", "crazyflie/base_link")
-   camera_frame = rospy.get_param("~cam_frame", "camera_ir_optical_frame")
+   camera_frame = rospy.get_param("~cam_frame", "camera_rgb_optical_frame")
    r = rospy.get_param("~rate", 10)     # default rate is 10 Hz
 
    # subscribe to crazyflie tf
    listener = tf.TransformListener()
 
    # get camera info from parameter server
-   camera_height = rospy.get_param('camera_height')      # sd height is 424; qhd height is 540
-   camera_width = rospy.get_param('camera_width')        # sd width is 512; qhd width is 960
+   camera_height = 480 #rospy.get_param('camera_height')      # sd height is 424; qhd height is 540
+   camera_width = 640 #rospy.get_param('camera_width')        # sd width is 512; qhd width is 960
+
+   #rospy.loginfo("Crazyflie outside of window %f %f %f", trans[0], trans[1], trans[2])
+   rospy.loginfo("Taking off requested")
+   rospy.wait_for_service('/crazyflie/takeoff')
+   try:
+       _takeoff = rospy.ServiceProxy('/crazyflie/takeoff', Empty)
+       _takeoff()
+   except rospy.ServiceException, e:
+       rospy.loginfo("Service call failed: %s", e)
 
    # continue to process at the given rate until a shutdown request is received
    rate = rospy.Rate(r)

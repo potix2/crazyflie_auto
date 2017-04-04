@@ -5,6 +5,7 @@ import tf
 from pid import PID
 from geometry_msgs.msg import PoseStamped, Twist
 from std_srvs.srv import Empty
+import time
 
 class CF_Controller():
 
@@ -41,8 +42,8 @@ class CF_Controller():
       self.velocity_pub = rospy.Publisher ('/crazyflie/cmd_vel', Twist, queue_size=1)
 
       # get camera info from parameter server
-      self.camera_height = rospy.get_param('camera_height')      # sd height is 424; qhd height is 540
-      self.camera_width = rospy.get_param('camera_width')        # sd width is 512; qhd width is 960
+      self.camera_height = 480 #rospy.get_param('camera_height')      # sd height is 424; qhd height is 540
+      self.camera_width = 640 #rospy.get_param('camera_width')        # sd width is 512; qhd width is 960
 
       # create flight PID controllers in X, Y and Z 
       self.m_pidX = PID(rospy.get_param("~PIDs/X/kp"),
@@ -121,7 +122,7 @@ class CF_Controller():
       print "dt is %f" % dt
 
       # receive tf transform on the location of Crazyflie; log critical values of x, y, z
-      (cf_trans, cf_rot) = self._getTransform("kinect2_ir_optical_frame", cf_frame) 
+      (cf_trans, cf_rot) = self._getTransform("camera_rgb_optical_frame", cf_frame) 
       rospy.loginfo("cf_trans %f %f %f", cf_trans[0], cf_trans[1], cf_trans[2])
 
 
@@ -176,11 +177,11 @@ class CF_Controller():
          self.fly.linear.x = 0.0             # set cmd_vel x and y to 0
          self.fly.linear.y = 0.0
 
-         rospy.loginfo("new upper limit %f", self.takeoff_position[1]-25)
+         rospy.loginfo("new upper limit %f", self.takeoff_position[1]-100)
 
          # increase thrust until position is 25 pixels above the takeoff position
          #   (in camera -y direction) 
-         if (cf_trans[1] < (self.takeoff_position[1]-25)) or (self.thrust > 50000):
+         if (cf_trans[1] < (self.takeoff_position[1]-100)) or (self.thrust > 50000):
 
             # when 25 pixels above the takeoff position is achieved,
             # reset controllers; log values and achievement; change state to flight
@@ -188,6 +189,7 @@ class CF_Controller():
             rospy.loginfo("Takeoff thrust %f, ki %f", self.thrust, self.m_pidZ.set_ki())
             self.m_pidZ.setIntegral((self.thrust - 1500.0)/ self.m_pidZ.set_ki())
             rospy.loginfo("Takeoff achieved!")
+            #self._cf_state = 'land'
             self._cf_state = 'flight'
             self.thrust = 0.0
 
@@ -195,7 +197,7 @@ class CF_Controller():
          #  calculation is based on delta time (time elapsed) and fudge factor;
          #  slow but steady increments that decrease above 36000
          else:
-            if self.thrust < 36000:
+            if self.thrust < 45000:
                self.thrust += 10000 * dt * self.ff
             else:
                self.thrust += 3000 * dt * self.ff
@@ -278,6 +280,7 @@ if __name__ == '__main__':
    cf_frame = rospy.get_param("~frame", "crazyflie/base_link")
    frequency = rospy.get_param("frequency", 50.0)
 
+   time.sleep(10)
    # start up the controller node and run until shutdown by interrupt
    try:
       controller = CF_Controller()
