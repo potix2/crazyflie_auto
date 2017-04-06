@@ -177,11 +177,11 @@ class CF_Controller():
          self.fly.linear.x = 0.0             # set cmd_vel x and y to 0
          self.fly.linear.y = 0.0
 
-         rospy.loginfo("new upper limit %f", self.takeoff_position[1]-100)
+         rospy.loginfo("new upper limit %f", self.takeoff_position[1]-40)
 
          # increase thrust until position is 25 pixels above the takeoff position
          #   (in camera -y direction) 
-         if (cf_trans[1] < (self.takeoff_position[1]-100)) or (self.thrust > 50000):
+         if (cf_trans[1] < (self.takeoff_position[1]-40)) or (self.thrust > 50000):
 
             # when 25 pixels above the takeoff position is achieved,
             # reset controllers; log values and achievement; change state to flight
@@ -197,7 +197,7 @@ class CF_Controller():
          #  calculation is based on delta time (time elapsed) and fudge factor;
          #  slow but steady increments that decrease above 36000
          else:
-            if self.thrust < 45000:
+            if self.thrust < 46000:
                self.thrust += 10000 * dt * self.ff
             else:
                self.thrust += 3000 * dt * self.ff

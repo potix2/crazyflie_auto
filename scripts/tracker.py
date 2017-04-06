@@ -9,6 +9,7 @@ import cv2
 from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
 import tf
+import traceback
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import CameraInfo
@@ -86,10 +87,18 @@ class CrazyflieTracker:
         # duck
         # lower=[ 17  36 229], upper=[ 72 146 255]
 
+
+        h_margin = 10
+        s_margin = 30
+        v_margin = 30
+        # green origami
+        lower = np.array([143 / 2 - h_margin, 63 * 255 / 100 - s_margin, 47 * 255 / 100 - v_margin], np.uint8)
+        upper = np.array([143 / 2 + h_margin, 63 * 255 / 100 + s_margin, 47 * 255 / 100 + v_margin], np.uint8)
+
         # blue light
         # lower=[ 88 130 212], upper=[128 210 255]
-        lower = np.array([88, 130, 229], np.uint8)
-        upper = np.array([128, 210, 255], np.uint8)
+        #lower = np.array([88, 130, 229], np.uint8)
+        #upper = np.array([128, 210, 255], np.uint8)
         mask = cv2.inRange(hsv, lower, upper)
 
         # dilate and erode with kernel size 11x11
@@ -101,45 +110,53 @@ class CrazyflieTracker:
 
         # Check for at least one target found
         if self.contourLength < 1:
-           print "No target found"
-
+            return
         else:
             # target found
             ## Loop through all of the contours, and get their areas
-            area = np.array([0.0]*len(contours))
-            for i in range(self.contourLength):
-               area[i] = cv2.contourArea(contours[i])
+            try:
+                area = np.array([0.0]*len(contours))
+                for i in range(self.contourLength):
+                   area[i] = cv2.contourArea(contours[i])
 
-            #### Target #### the largest "pink" object
-            # target_image = contours[area.index(max(area))]
-            indicies = np.argpartition(-area, 1)[:2]
-            tu = 0
-            tv = 0
-            for i in indicies:
-                target_image = contours[i]
+                #### Target #### the largest "pink" object
+                # target_image = contours[area.index(max(area))]
+                indicies = np.argpartition(-area, 1)[:1]
+                tu = 0
+                tv = 0
+                for i in indicies:
+                    target_image = contours[i]
 
-                # Using moments find the center of the object and draw a red outline around the object
-                target_m = cv2.moments(target_image)
-                target_u = int(target_m['m10']/target_m['m00'])
-                target_v = int(target_m['m01']/target_m['m00'])
-                points = cv2.minAreaRect(target_image)
-                box = cv2.boxPoints(points)
-                box = np.int0(box)
-                cv2.drawContours(image, [box], 0, (0, 0, 255), 2)
-                # rospy.loginfo("target is x at %d and y at %d", int(target_u), int(target_v))
-                tu += target_u
-                tv += target_v
-            self.target_u = int(tu / 2)
-            self.target_v = int(tv / 2)
-            # rospy.loginfo("Center of target is x at %d and y at %d", int(self.target_u), int(self.target_v))
+                    # Using moments find the center of the object and draw a red outline around the object
+                    target_m = cv2.moments(target_image)
+                    target_u = int(target_m['m10']/target_m['m00'])
+                    target_v = int(target_m['m01']/target_m['m00'])
+                    points = cv2.minAreaRect(target_image)
+                    box = cv2.boxPoints(points)
+                    box = np.int0(box)
+                    cv2.drawContours(image, [box], 0, (0, 0, 255), 2)
+                    # rospy.loginfo("target is x at %d and y at %d", int(target_u), int(target_v))
+                    tu += target_u
+                    tv += target_v
+                self.target_u = int(tu / 2)
+                self.target_v = int(tv / 2)
 
-            self.target_found = True               # set flag for depth_callback processing
+                # rospy.loginfo("Center of target is x at %d and y at %d", int(self.target_u), int(self.target_v))
+                self.target_found = True               # set flag for depth_callback processing
+                self.countNotFound = 0
 
-            # show image with target outlined with a red rectangle
-            cv2.imshow ("Target", image)
+                # show image with target outlined with a red rectangle
+                cv2.imshow ("Target", image)
 
-            # TODO: save image when pressed 's' key
-            cv2.waitKey(3)
+                # TODO: save image when pressed 's' key
+                #cv2.waitKey(3)
+            except:
+                self.countNotFound += 1
+                if self.countNotFound > 10:
+                    self.target_found = False
+                #traceback.print_exc()
+                #rospy.loginfo("failed to detect target: " + traceback.format_tb(e))
+                return
 
 
     def depth_callback(self, msg):
@@ -172,18 +189,6 @@ class CrazyflieTracker:
                                 tf.transformations.quaternion_from_euler(self.r, self.p, self.y),
                                 rospy.Time.now(),
                                 "crazyflie/base_link", self.camera_link)
-#        self.pub_tf.sendTransform((0.6 - y / 640.0,
-#                                   - z,
-#                                   0),
-#                                tf.transformations.quaternion_from_euler(self.r, self.p, self.y),
-#                                rospy.Time.now(),
-#                                "crazyflie/base_link", self.camera_link)
-#        self.pub_tf.sendTransform(( x / 300.0,
-#                                    y / 500.0,
-#                                    z),
-#                                tf.transformations.quaternion_from_euler(self.r, self.p, self.y),
-#                                rospy.Time.now(),
-#                                "crazyflie/base_link", self.camera_link)
         rospy.loginfo("Send CF transform %f %f %f", x, y, z)
 
 def main(args):
