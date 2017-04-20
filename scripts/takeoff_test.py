@@ -45,7 +45,7 @@ if __name__ == '__main__':
          # check Crazyflie's x and y location with respect to the Kinect image --
          # if Crazyflie is within 100 pixels of the image's horizontal edges (x)
          # or if it is with in 20 pixels of the image's vertical edges (y)
-         if (trans[0] < 100) or (trans[0] > (camera_width - 100)) or \
+         if (trans[0] < 50) or (trans[0] > (camera_width - 50)) or \
              (trans[1] < 20) or (trans[1] > (camera_height - 20)):
 
             # wait until land service is available, then create a handle for it

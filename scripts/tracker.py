@@ -19,6 +19,8 @@ class CrazyflieTracker:
 
     def __init__(self):
         rospy.init_node('crazyflie_tracker')
+        self.counter = 0
+        self.countNotFound = 0
         self.pub_tf = tf.TransformBroadcaster()
         self.bridge = CvBridge()
 
@@ -144,9 +146,13 @@ class CrazyflieTracker:
                 # rospy.loginfo("Center of target is x at %d and y at %d", int(self.target_u), int(self.target_v))
                 self.target_found = True               # set flag for depth_callback processing
                 self.countNotFound = 0
+                self.counter += 1
 
                 # show image with target outlined with a red rectangle
-                cv2.imshow ("Target", image)
+                #cv2.imshow ("Target", image)
+                if self.counter % 5 == 0:
+                    cv2.imwrite("/home/potix2/sampling/%d.png" % self.counter, image)
+
 
                 # TODO: save image when pressed 's' key
                 #cv2.waitKey(3)
