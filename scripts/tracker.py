@@ -10,7 +10,7 @@ from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
 import tf
 import traceback
-from detector import Detector
+from detector import Detector, CaptureCamera
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from sensor_msgs.msg import CameraInfo
@@ -24,7 +24,9 @@ class CrazyflieTracker(object):
         self.countNotFound = 0
         self.pub_tf = tf.TransformBroadcaster()
         self.bridge = CvBridge()
-        self.detector = Detector()
+        path = '/home/potix2/sampling'
+        fps = 20
+        self.detector = Detector(CaptureCamera(path, 640, 480, fps))
 
         # publish transform rate at 50Hz
         self.rate = rospy.Rate(50.0)
@@ -121,7 +123,7 @@ class CrazyflieTracker(object):
                                 tf.transformations.quaternion_from_euler(self.r, self.p, self.y),
                                 rospy.Time.now(),
                                 "crazyflie/base_link", self.camera_link)
-        rospy.loginfo("Send CF transform %f %f %f", x, y, z)
+        #rospy.loginfo("Send CF transform %f %f %f", x, y, z)
 
 def main(args):
     tracker = CrazyflieTracker()

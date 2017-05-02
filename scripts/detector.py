@@ -2,14 +2,50 @@ import sys
 import cv2
 import numpy as np
 import traceback
+import os.path
+import time
+
+
+class CaptureCamera(object):
+    def __init__(self, outdir, w, h, fps):
+        self._width=w
+        self._height=h
+        self._fps=fps
+        self._path=os.path.join(outdir, '{}.avi'.format(time.strftime('%Y%m%d-%H%M%S')))
+
+    @property
+    def width(self):
+        return self._width
+
+    @property
+    def height(self):
+        return self._height
+
+    @property
+    def fps(self):
+        return self._fps
+
+    @property
+    def path(self):
+        return self._path
 
 
 class Detector(object):
 
-    def __init__(self):
+    def __init__(self, cc=None):
         self.countNotFound = 0
         self.counter = 0
         self.target_found = True
+        if cc is not None:
+            self.capture_camera = cc
+            size = (self.capture_camera.width, self.capture_camera.height)
+            self.video_writer = cv2.VideoWriter(
+                    self.capture_camera.path, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), self.capture_camera.fps, size)
+
+    def _capture(self, image):
+        # show image with target outlined with a red rectangle
+        if self.capture_camera is not None:
+            self.video_writer.write(image)
 
     def detect(self, image):
         target_u = 0
@@ -35,6 +71,7 @@ class Detector(object):
 
         # Check for at least one target found
         if contourLength < 1:
+            self._capture(image)
             return None
         else:
             # target found
@@ -68,10 +105,7 @@ class Detector(object):
                 self.counter += 1
                 self.target_found = True
 
-                # show image with target outlined with a red rectangle
-                if self.counter % 5 == 0:
-                    cv2.imwrite("/home/potix2/sampling/%d.png" % self.counter, image)
-
+                self._capture(image)
                 return (target_u, target_v)
             except:
                 self.countNotFound += 1
@@ -80,3 +114,22 @@ class Detector(object):
                 return None
 
 
+if __name__ == '__main__':
+    cam = cv2.VideoCapture(2)
+    size = (int(cam.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+    print("size=({}, {})".format(size[0], size[1]))
+    path = '/home/potix2/sampling'
+    cc = CaptureCamera(path, size[0], size[1], fps=30)
+    detector = Detector(cc)
+    while True:
+        ret, img = cam.read()
+        if img is not None:
+            #cv2.imshow('realsense', img)
+            #if cv2.waitKey(1) == 27:
+            #    break
+            ret = detector.detect(img)
+            if ret is None:
+                continue
+            u, v = ret
+            print("x,y=({},{})".format(u, v))
+    cv2.destroyAllWindows()

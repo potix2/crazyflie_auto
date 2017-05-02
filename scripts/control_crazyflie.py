@@ -150,13 +150,13 @@ class CF_Controller():
 
          # use camera -z position; make sure depth value is not 0; if it is 0, use previous value
          # calculate PID control value for Crazyflie y control
-         #if cf_trans[2] == 0.0:
-         #   rospy.loginfo("Camera z is zero")
-         #   self.fly.linear.y = self.m_pidY.update(self.hover_position[2], self.last_depth)
-         #else:
-         #   self.fly.linear.y = self.m_pidY.update(self.hover_position[2], cf_trans[2])
-         #   self.last_depth = cf_trans[2]
-         self.fly.linear.y = 0 # self.m_pidY.update(self.hover_position[2], cf_trans[2])
+         if cf_trans[2] == 0.0:
+            rospy.loginfo("Camera z is zero")
+            self.fly.linear.y = self.m_pidY.update(self.hover_position[2], self.last_depth)
+         else:
+            self.fly.linear.y = self.m_pidY.update(self.hover_position[2], cf_trans[2])
+            self.last_depth = cf_trans[2]
+         #self.fly.linear.y = 0 # self.m_pidY.update(self.hover_position[2], cf_trans[2])
 
          # use camera -y position
          # calculate PID control value for Crazyflie z control
