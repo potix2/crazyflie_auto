@@ -36,15 +36,41 @@ class Detector(object):
         self.countNotFound = 0
         self.counter = 0
         self.target_found = True
+        self.target = None
+        self.capture_callbacks = []
+        self._text_start_positions = [
+                (2,8), (210,8), (420,8),
+                (2,18), (210,18), (420,18)
+                ]
+
+
+        self.add_capture_callback(self._capture_time)
+        self.add_capture_callback(self._capture_position)
+
         if cc is not None:
             self.capture_camera = cc
             size = (self.capture_camera.width, self.capture_camera.height)
             self.video_writer = cv2.VideoWriter(
                     self.capture_camera.path, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), self.capture_camera.fps, size)
 
+    def _capture_time(self):
+        return 'Time: %s' % time.strftime('%Y-%m-%d %H:%M:%S')
+
+    def _capture_position(self):
+        if self.target is not None:
+            return 'Target Position: (%d, %d)' % (self.target[0], self.target[1])
+        else:
+            return 'Target Position: (-, -)'
+
+    def add_capture_callback(self, callback):
+        self.capture_callbacks.append((callback, self._text_start_positions[len(self.capture_callbacks)]))
+
     def _capture(self, image):
         # show image with target outlined with a red rectangle
         if self.capture_camera is not None:
+            for (callback, start_position) in self.capture_callbacks:
+                text = callback()
+                cv2.putText(image, text, start_position, cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255,255,255))
             self.video_writer.write(image)
 
     def detect(self, image):
@@ -105,8 +131,9 @@ class Detector(object):
                 self.counter += 1
                 self.target_found = True
 
+                self.target = (target_u, target_v)
                 self._capture(image)
-                return (target_u, target_v)
+                return self.target
             except:
                 self.countNotFound += 1
                 if self.countNotFound > 10:
@@ -124,12 +151,8 @@ if __name__ == '__main__':
     while True:
         ret, img = cam.read()
         if img is not None:
-            #cv2.imshow('realsense', img)
-            #if cv2.waitKey(1) == 27:
-            #    break
             ret = detector.detect(img)
             if ret is None:
                 continue
             u, v = ret
-            print("x,y=({},{})".format(u, v))
     cv2.destroyAllWindows()
