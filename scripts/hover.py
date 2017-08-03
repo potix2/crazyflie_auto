@@ -26,8 +26,7 @@ class CF_Controller():
       self.hover_position = [0.0, 0.0, 0.0]
       self.last_depth = 0.0                # variable to keep non-zero value for camera depth 
 
-      # initialize services for land and takeoff
-      # emergency is handled by crazyflie_server.cpp in crazyflie_ros/crazyflie_driver package
+      # initialize services for land and takeoff # emergency is handled by crazyflie_server.cpp in crazyflie_ros/crazyflie_driver package
       s1 = rospy.Service("/crazyflie/land", Empty, self._Land)
       s2 = rospy.Service("/crazyflie/takeoff", Empty, self._Takeoff)
 
@@ -97,14 +96,6 @@ class CF_Controller():
       self.target_position = msg
       self.target = True
 
-   # This function gets the current transform between the target_frame and the source_frame.
-   def _getTransform(self, target_frame, source_frame):
-
-      if self.listener.frameExists(target_frame) and self.listener.frameExists(source_frame):
-         t = self.listener.getLatestCommonTime(target_frame, source_frame)
-         result, other = self.listener.lookupTransform(target_frame, source_frame, t)
-         return result, other
-
    # This function calls the reset function for all the PID controllers.
    def _pidReset(self):
       self.m_pidX.reset()
@@ -123,10 +114,6 @@ class CF_Controller():
       except (AttributeError, TypeError):
          dt = 0
 
-      # receive tf transform on the location of Crazyflie; log critical values of x, y, z
-      (cf_trans, cf_rot) = self._getTransform("camera_rgb_optical_frame", cf_frame) 
-      rospy.loginfo("cf_trans %f %f %f", cf_trans[0], cf_trans[1], cf_trans[2])
-
       self.state_pub.publish(String(self._cf_state))
 
       ##### Idle ########
@@ -136,42 +123,16 @@ class CF_Controller():
          self.fly.linear.y = 0.0
          self.fly.linear.z = 0.0
          self.thrust = 0.0
-
-         # save current position as the takeoff position
-         self.takeoff_position = cf_trans
-
+         self._cf_state = 'takeoff'
 
       ##### Hover ########
       # use x, y, and z PID controllers to keep Crazyflie's position the same as the hover position
       #
       elif self._cf_state == 'hover':
 
-         # use camera -x position
-         # calculate PID control value for Crazyflie x control
-         self.fly.linear.x = self.m_pidX.update((self.camera_width - cf_trans[0]) * -1,
-                                                (self.camera_width - self.hover_position[0]) * -1)
-
-         # use camera -z position; make sure depth value is not 0; if it is 0, use previous value
-         # calculate PID control value for Crazyflie y control
-         #if cf_trans[2] == 0.0:
-         #   rospy.loginfo("Camera z is zero")
-         #   self.fly.linear.y = self.m_pidY.update(self.hover_position[2], self.last_depth)
-         #else:
-         #   self.fly.linear.y = self.m_pidY.update(self.hover_position[2], cf_trans[2])
-         #   self.last_depth = cf_trans[2]
-         #self.fly.linear.y = 0 # self.m_pidY.update(self.hover_position[2], cf_trans[2])
-
-         # use camera -y position
-         # calculate PID control value for Crazyflie z control
-         self.fly.linear.z = self.m_pidZ.update((self.camera_height - cf_trans[1]),
-                                                (self.camera_height - self.hover_position[1]))
-
-         # record values to log file
-         rospy.loginfo("hover_position %f %f %f", self.hover_position[0], self.hover_position[1],
-            self.hover_position[2])
-         rospy.loginfo("Velocity msg published x %f y %f z % f", self.fly.linear.x, self.fly.linear.y,
-            self.fly.linear.z)
-
+         self.fly.linear.x = 0.0             # set cmd_vel x and y to 0
+         self.fly.linear.y = 0.0
+         self.fly.linear.z = 60000.0
 
       ##### Takeoff ########
       # increase the thrust (z) value in the command velocity message until takeoff is achieved
@@ -180,39 +141,9 @@ class CF_Controller():
 
          self.fly.linear.x = 0.0             # set cmd_vel x and y to 0
          self.fly.linear.y = 0.0
-
-         rospy.loginfo("new upper limit %f", self.takeoff_position[1]-40)
-
-         # increase thrust until position is 25 pixels above the takeoff position
-         #   (in camera -y direction) 
-         if (cf_trans[1] < (self.takeoff_position[1]-40)) or (self.thrust > 48000):
-
-            # when 25 pixels above the takeoff position is achieved,
-            # reset controllers; log values and achievement; change state to flight
-            self._pidReset()
-            rospy.loginfo("Takeoff thrust %f, ki %f", self.thrust, self.m_pidZ.set_ki())
-            self.m_pidZ.setIntegral((self.thrust - 1500.0)/ self.m_pidZ.set_ki())
-            rospy.loginfo("Takeoff achieved!")
-            #self._cf_state = 'land'
-            self._cf_state = 'flight'
-            self.thrust = 0.0
-
-         # if position has not been achieved; increase thrust (z) value in command velocity;
-         #  calculation is based on delta time (time elapsed) and fudge factor;
-         #  slow but steady increments that decrease above 36000
-         else:
-            if self.thrust < 46000:
-               self.thrust += 1000 * dt * self.ff
-            else:
-               self.thrust += 1000 * dt * self.ff
-
-            self.fly.linear.z = self.thrust
-            rospy.loginfo("Takeoff Thrust value %f", self.fly.linear.z)
-
-         # print thrust values and command velocity values to screen for debugging
-         print "Thrust is %f" % self.thrust
-         print "Velocity msg published x %f y %f z % f" % (self.fly.linear.x, self.fly.linear.y,
-            self.fly.linear.z)
+         self.fly.linear.z = 35000.0
+         self._cf_state = 'hover'
+         self.thrust = 35000.0
 
       ##### Land ########
       elif self._cf_state == 'land':
@@ -228,51 +159,14 @@ class CF_Controller():
          self._cf_state = 'idle'
 
 
-      ##### Flight ########
-      # use x, y, and z PID controllers to move Crazyflie's position to the target position
-      #
-      elif self._cf_state == 'flight':
-
-         # check for target pose, if none then hover
-         if not self.target:
-            rospy.loginfo("Hover position set!!!!!!!!!!")
-            self.hover_position = cf_trans
-            rospy.loginfo("Hover pose is %f %f %f", self.hover_position[0], self.hover_position[1], 
-                                                    self.hover_position[2])
-            self._cf_state = 'hover'
-
-         # if target pose exists, head for target
-         else:
-            rospy.loginfo("Flying to target!!!")
-            rospy.loginfo("Target position is x %f, y %f, z %f", self.target_position.pose.position.x,
-                        self.target_position.pose.position.y, self.target_position.pose.position.z)
-            
-            # use camera -x position
-            # calculate PID control value for Crazyflie x control
-            self.fly.linear.x = self.m_pidX.update((self.camera_width - cf_trans[0]), 
-                                (self.camera_width - self.target_position.pose.position.x))  
-       
-            # use camera -z position
-            # calculate PID control value for Crazyflie y control
-            self.fly.linear.y = self.m_pidY.update(cf_trans[2], self.target_position.pose.position.z)
-
-            # use camera -y position
-            # calculate PID control value for Crazyflie z control
-            self.fly.linear.z = self.m_pidZ.update((self.camera_height - cf_trans[1]), 
-                                (self.camera_height - self.target_position.pose.position.y + 25))   
-#  for testing only                                              (self.camera_height - cf_trans[1]))   
-
-         # record values to log file
-         rospy.loginfo("Target_position %f %f %f", self.target_position.pose.position.x,
-                 self.target_position.pose.position.y, self.target_position.pose.position.z)
-         rospy.loginfo("Velocity msg published x %f y %f z % f", self.fly.linear.x, self.fly.linear.y,
-                 self.fly.linear.z)
-
       # publish command velocity message to Crazyflie
+      self.fly.linear.x = 0.0
+      self.fly.linear.y = 0.0
+      self.fly.linear.z = 32767.0
       self.velocity_pub.publish(self.fly)
 
       # log flight state
-      rospy.loginfo("CF_state is %s", str(self._cf_state))
+      # rospy.loginfo("CF_state is %s", str(self._cf_state))
 
 
 if __name__ == '__main__':
@@ -284,11 +178,11 @@ if __name__ == '__main__':
    cf_frame = rospy.get_param("~frame", "crazyflie/base_link")
    frequency = rospy.get_param("frequency", 50.0)
 
-   time.sleep(10)
+   time.sleep(5)
    # start up the controller node and run until shutdown by interrupt
    try:
       controller = CF_Controller()
-      rospy.Timer(rospy.Duration(1.0/frequency), controller.iteration)   
+      rospy.Timer(rospy.Duration(1.0/frequency), controller.iteration)
 
       rospy.spin()                  # keep process alive
 

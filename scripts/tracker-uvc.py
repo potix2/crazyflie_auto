@@ -39,10 +39,6 @@ class CrazyflieTracker(object):
 
         self.target_u = 0
         self.target_v = 0
-        self.target_d = 0
-
-        self.last_d = 0
-
 
         #self.r = 0
         self.y = 0
@@ -51,14 +47,11 @@ class CrazyflieTracker(object):
         self.p = 0
 
         # subscribe to kinect image messages
-        rospy.wait_for_message("/camera/rgb/camera_info", CameraInfo)
-        rospy.wait_for_message("/camera/depth/camera_info", CameraInfo)
+        rospy.wait_for_message("/camera/camera_info", CameraInfo)
 
         # Subscribe to Realsense R200 camera_info to get image frame height and width
-        rospy.Subscriber('/camera/rgb/camera_info', CameraInfo, self.camera_data, queue_size=1)
-        rospy.Subscriber("/camera/rgb/image_rect_color", Image, self.image_callback, queue_size=1)
-        rospy.Subscriber('/camera/depth/camera_info', CameraInfo, self.depth_camera_data, queue_size=1)
-        rospy.Subscriber("/camera/depth/image", Image, self.depth_callback, queue_size=1)
+        rospy.Subscriber('/camera/camera_info', CameraInfo, self.camera_data, queue_size=1)
+        rospy.Subscriber("/camera/image_raw", Image, self.image_callback, queue_size=1)
         rospy.Subscriber('/crazyflie/state', String, self._cf_state_callback, queue_size=1)
         rospy.Subscriber('/crazyflie/cmd_vel', Twist, self._cf_cmd_vel_callback, queue_size=1)
 
@@ -77,18 +70,6 @@ class CrazyflieTracker(object):
         self.cam_width = data.width
         # rospy.loginfo("camera: width=%d, height=%d", int(self.cam_width), int(self.cam_height))
 
-
-    def depth_camera_data(self, data):
-        # set values on the parameter server
-        rospy.set_param('camera_depth_height', data.height)         # sd height is 424 / qhd height is 540
-        rospy.set_param('camera_depth_width', data.width)           # sd width is 512 / qhd width is 960
-
-        # set values for local variables
-        self.cam_depth_height = data.height
-        self.cam_depth_width = data.width
-        # rospy.loginfo("camera depth: width=%d, height=%d", int(self.cam_depth_width), int(self.cam_depth_height))
-
-
     def image_callback(self,data):
         try:
             image = self.bridge.imgmsg_to_cv2(data, "bgr8")
@@ -100,26 +81,7 @@ class CrazyflieTracker(object):
         if position is not None:
             self.target_u = position[0]
             self.target_v = position[1]
-
-    def depth_callback(self, msg):
-
-        # create OpenCV depth image using default passthrough encoding
-        try:
-            depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
-        except CvBridgeError as e:
-            print(e)
-
-        # using box (u, v) position, find depth value of Crazyflie point
-        target_depth = depth_image[int(self.target_v * self.cam_depth_height / self.cam_height), int(self.target_u * self.cam_depth_width / self.cam_width)]
-
-        if np.isnan(target_depth) or target_depth == 0:
-            self.target_d = self.last_d
-        else:
-            self.last_d = target_depth
-        # rospy.loginfo("Depth: x at %d  y at %d  z at %f", int(self.target_u), int(self.target_v), self.target_d)
-
-        # publish Crazyflie tf transform
-        self.update_cf_transform(self.target_u, self.target_v, self.target_d)
+            self.update_cf_transform(self.target_u, self.target_v, 0.0)
 
     def _cf_state_callback(self, state):
         self.cf_state = state.data
@@ -128,13 +90,8 @@ class CrazyflieTracker(object):
         return 'State: {}'.format(self.cf_state)
 
     def _mask_range(self):
-        h_margin = 10
-        s_margin = 30
-        v_margin = 30
-
-        # green origami
-        lower = np.array([143 / 2 - h_margin, 63 * 255 / 100 - s_margin, 47 * 255 / 100 - v_margin], np.uint8)
-        upper = np.array([143 / 2 + h_margin, 63 * 255 / 100 + s_margin, 47 * 255 / 100 + v_margin], np.uint8)
+        lower = np.array([0, 0, 200], np.uint8)
+        upper = np.array([360, 255, 255], np.uint8)
         return (lower, upper)
 
     def _cf_cmd_vel_callback(self, data):
